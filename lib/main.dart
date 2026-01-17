@@ -8,20 +8,22 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      debugShowCheckedModeBanner: false,
+      title: 'WebView Challenge',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const MyHomePage(title: 'WebView JS Example'),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
-
   final String title;
 
   @override
@@ -29,54 +31,93 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-
   late final WebViewController _controller;
 
-@override
+  int _totalFromJS = 0;
+
+  @override
   void initState() {
-    // TODO: implement initState
     super.initState();
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadHtmlString(htmlContent);
+      ..setBackgroundColor(const Color(0x00000000))
+      ..addJavaScriptChannel(
+        'FlutterChannel',
+        onMessageReceived: (JavaScriptMessage message) {
+          setState(() {
+            _totalFromJS = int.tryParse(message.message) ?? 0;
+          });
+        },
+      )
+      ..loadFlutterAsset('assets/challenge_webview.html');
   }
 
-  Future<void> _sendMessage() async{
-    await _controller.runJavaScript("showMessageFromFlutter('Hello From Flutter!')");
-    final result = await _controller.runJavaScriptReturningResult("showMessageFromFlutter('Hello From Flutter with return value')");
-    debugPrint("JS return: $result");
+  Future<void> _sendUpdateToJS() async {
+    int newTotal = _totalFromJS + 100;
+
+    setState(() {
+      _totalFromJS = newTotal;
+    });
+
+    await _controller.runJavaScript("updateTotalFromFlutter($newTotal)");
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-       actions: [IconButton(onPressed: _sendMessage, icon: Icon(Icons.send))],
+        title: Text(widget.title),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: const TextStyle(color: Colors.black, fontSize: 18),
       ),
-      body: WebViewWidget(controller: _controller),
+      body: Column(
+        children: [
+          Expanded(
+            child: WebViewWidget(controller: _controller),
+          ),
+
+          Container(
+            color: Colors.grey[200],
+            padding: const EdgeInsets.all(20),
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Received from JS:",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  "Total: \$$_totalFromJS",
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _sendUpdateToJS,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple[50],
+                      foregroundColor: Colors.deepPurple,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: const Text(
+                      "Send +100 total from Flutter to JS",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
-const String htmlContent = """
-<!DOCTYPE html>
-<html>
-<head>
-  <title>JS from Flutter</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body>
-  <h1>Web Page</h1>
-  <p id="msg">No message yet</p>
-
-  <script>
-    function showMessageFromFlutter(msg) {
-      document.getElementById('msg').innerText = "Flutter says: " + msg;
-      return "Message received: " + msg;
-    }
-  </script>
-</body>
-</html>
-""";
